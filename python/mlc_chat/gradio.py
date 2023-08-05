@@ -24,8 +24,7 @@ def _parse_args():
         help="create a publicly shareable link for the interface",
     )
     args.add_argument("--port", type=int, default=7860)
-    parsed = args.parse_args()
-    return parsed
+    return args.parse_args()
 
 
 llm_local_ids = []
@@ -59,7 +58,7 @@ class GradioChatModule(ChatModule):
         elif quantization_type[3:5] == "32":
             self.curr_llm_dtype = "float32"
         else:
-            raise ValueError(f"LLM dtype is not supported")
+            raise ValueError("LLM dtype is not supported")
 
         # load the langauge model
         model_dir = os.path.join(self.artifact_path, llm_model)
@@ -133,7 +132,7 @@ class GradioChatModule(ChatModule):
         elif quantization_type[3:5] == "32":
             self.vision_dtype = "float32"
         else:
-            raise ValueError(f"image model dtype is not supported")
+            raise ValueError("image model dtype is not supported")
 
         # reload image model
         model_dir = os.path.join(self.artifact_path, image_model)
@@ -209,9 +208,7 @@ class GradioChatModule(ChatModule):
                 new_msg = self.get_message()
                 new_utf8_chars = new_msg.encode("utf-8")
                 pos = first_idx_mismatch(cur_utf8_chars, new_utf8_chars)
-                print_msg = ""
-                for _ in range(pos, len(cur_utf8_chars)):
-                    print_msg += "\b \b"
+                print_msg = "".join("\b \b" for _ in range(pos, len(cur_utf8_chars)))
                 for j in range(pos, len(new_utf8_chars)):
                     print_msg += chr(new_utf8_chars[j])
                 cur_utf8_chars = new_utf8_chars
@@ -405,18 +402,15 @@ def load_params(model_dir, device):
     from tvm.contrib import tvmjs
 
     params, meta = tvmjs.load_ndarray_cache(f"{model_dir}/params", device)
-    plist = []
     size = meta["ParamSize"]
-    for i in range(size):
-        plist.append(params[f"param_{i}"])
-    return plist
+    return [params[f"param_{i}"] for i in range(size)]
 
 
 def load_model(model_dir, device_name):
     """Load model executable from the local directory."""
     model_lib, model_name = None, model_dir.split("/")[-1]
     for path in glob.glob(os.path.join(model_dir, "*")):
-        if path.split("/")[-1].startswith(model_name + "-" + device_name):
+        if path.split("/")[-1].startswith(f"{model_name}-{device_name}"):
             model_lib = path
             break
     assert model_lib is not None, "compiled model does not exist"
@@ -427,10 +421,14 @@ def load_model(model_dir, device_name):
 
 def first_idx_mismatch(str1, str2):
     """Find the first index that mismatch in two strings."""
-    for i, (char1, char2) in enumerate(zip(str1, str2)):
-        if char1 != char2:
-            return i
-    return min(len(str1), len(str2))
+    return next(
+        (
+            i
+            for i, (char1, char2) in enumerate(zip(str1, str2))
+            if char1 != char2
+        ),
+        min(len(str1), len(str2)),
+    )
 
 
 def transform_image(image, dtype, image_size=224):

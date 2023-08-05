@@ -171,8 +171,8 @@ def decoding_func(
     transpose_output: bool = False,
     dtype: str = "float16",
 ) -> FTEDequantize:
-    assert dtype in ["float16"], "Only support float16 currently"
-    assert sym == False, "Only support sym=False currently"
+    assert dtype in {"float16"}, "Only support float16 currently"
+    assert not sym, "Only support sym=False currently"
     assert storage_nbit == 32, "Only support storage_nbit=32 currently"
 
     def te_decode_asym(qweight, qzeros, scales, g_idx):

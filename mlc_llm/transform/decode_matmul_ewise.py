@@ -46,19 +46,18 @@ def pattern_check(gemv_only: bool):
 
 
 def decode_matmul_pattern(match_ewise: int, n_aux_tensor: int, gemv_only: bool):
-    assert n_aux_tensor == 1 or n_aux_tensor == 2 or n_aux_tensor == 3 or n_aux_tensor == 4
+    assert n_aux_tensor in {1, 2, 3, 4}
 
     w_scaled = wildcard()
     aux_tensors = [wildcard(), wildcard(), wildcard(), wildcard()]
     x = wildcard()
     w = is_op("relax.call_tir")(
         GlobalVarPattern(),
-        TuplePattern([w_scaled, *aux_tensors[0:n_aux_tensor]]),
+        TuplePattern([w_scaled, *aux_tensors[:n_aux_tensor]]),
         add_constraint=False,
     )
     matmul_args = [x, w]
-    for _ in range(match_ewise):
-        matmul_args.append(wildcard())
+    matmul_args.extend(wildcard() for _ in range(match_ewise))
     matmul = is_op("relax.call_tir")(
         GlobalVarPattern(), TuplePattern(matmul_args), add_constraint=False
     )

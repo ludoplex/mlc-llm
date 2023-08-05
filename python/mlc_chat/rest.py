@@ -23,21 +23,18 @@ def _shared_lib_suffix():
         return ".dll"
     if sys.platform.startswith("darwin"):
         cpu_brand_string = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"]).decode("utf-8")
-        if cpu_brand_string.startswith("Apple"):
-            # Apple Silicon
-            return ".so"
-        else:
-            # Intel (x86)
-            return ".dylib"
+        return ".so" if cpu_brand_string.startswith("Apple") else ".dylib"
     return ".so"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     chat_mod = ChatModule(ARGS.device_name, ARGS.device_id)
-    model_path = os.path.join(ARGS.artifact_path, ARGS.model + "-" + ARGS.quantization)
-    model_dir = ARGS.model + "-" + ARGS.quantization
-    model_lib = model_dir + "-" + ARGS.device_name + _shared_lib_suffix()
+    model_path = os.path.join(
+        ARGS.artifact_path, f"{ARGS.model}-{ARGS.quantization}"
+    )
+    model_dir = f"{ARGS.model}-{ARGS.quantization}"
+    model_lib = f"{model_dir}-{ARGS.device_name}{_shared_lib_suffix()}"
     lib_dir = os.path.join(model_path, model_lib)
     prebuilt_lib_dir = os.path.join(ARGS.artifact_path, "prebuilt", "lib", model_lib)
     if os.path.exists(lib_dir):
@@ -86,8 +83,7 @@ def _parse_args():
     args.add_argument("--host", type=str, default="127.0.0.1")
     args.add_argument("--port", type=int, default=8000)
 
-    parsed = args.parse_args()
-    return parsed
+    return args.parse_args()
 
 
 class AsyncChatCompletionStream:
@@ -95,20 +91,16 @@ class AsyncChatCompletionStream:
         return self
 
     async def get_next_msg(self):
-        if not session["chat_mod"].stopped():
-            session["chat_mod"].decode()
-            msg = session["chat_mod"].get_message()
-            return msg
-        else:
+        if session["chat_mod"].stopped():
             raise StopAsyncIteration
+        session["chat_mod"].decode()
+        return session["chat_mod"].get_message()
 
     async def __anext__(self):
-        if not session["chat_mod"].stopped():
-            task = asyncio.create_task(self.get_next_msg())
-            msg = await task
-            return msg
-        else:
+        if session["chat_mod"].stopped():
             raise StopAsyncIteration
+        task = asyncio.create_task(self.get_next_msg())
+        return await task
 
 
 @app.post("/v1/chat/completions")

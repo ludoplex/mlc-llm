@@ -40,7 +40,7 @@ def print_as_table(sorted_list):
         + "Total time (ms)".ljust(18)
         + "Percentage (%)"
     )
-    total_time = sum([record[1][0] * record[1][1] for record in sorted_list]) * 1000
+    total_time = sum(record[1][0] * record[1][1] for record in sorted_list) * 1000
     for record in sorted_list:
         time = record[1][0] * 1000
         weighted_time = time * record[1][1]

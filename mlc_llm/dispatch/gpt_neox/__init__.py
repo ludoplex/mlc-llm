@@ -8,6 +8,4 @@ def lookup(func):
     if ret is not None:
         return ret
     ret = redpajama_q4f32.lookup(func)
-    if ret is not None:
-        return ret
-    return None
+    return ret if ret is not None else None

@@ -75,9 +75,7 @@ class MiniGPTPatchEmbed(nn.Module):
         x = relax.op.permute_dims(x, [0, 2, 1])
         # concatenate with cls_tokens
         x_concat = relax.op.concat([self.cls_token, x], axis=1)
-        # add with pos_embed
-        res = relax.op.add(x_concat, self.pos_embed)
-        return res
+        return relax.op.add(x_concat, self.pos_embed)
 
 
 class MiniGPTVisualEncoderAttention(nn.Module):
@@ -228,10 +226,13 @@ class MiniGPTEmbedding(nn.Module):
         )
 
     def forward(self, embedding: relax.Expr):
-        res = relax.op.nn.layer_norm(
-            embedding, self.norm_weight, self.norm_bias, axes=[-1], epsilon=self.eps
+        return relax.op.nn.layer_norm(
+            embedding,
+            self.norm_weight,
+            self.norm_bias,
+            axes=[-1],
+            epsilon=self.eps,
         )
-        return res
 
 
 class MiniGPTBertAttention(nn.Module):
@@ -545,19 +546,19 @@ def get_model(args):
             raise ValueError(
                 "MiniGPT model path should be a single file instead of a directory."
             )
-        llama_state_dict = torch.load(model_path + ".pth", map_location="cpu")["model"]
+        llama_state_dict = torch.load(f"{model_path}.pth", map_location="cpu")["model"]
 
-        param_list = []
         device = tvm.cpu()
         visual_encoder_key_list = list(visual_encoder_state_dict.keys())[
             : 4 + 13 * config.visual_encoder_num_blocks
         ]
-        for key in visual_encoder_key_list:
-            param_list.append(
-                tvm.nd.array(
-                    visual_encoder_state_dict[key].numpy().astype(config.dtype), device
-                )
+        param_list = [
+            tvm.nd.array(
+                visual_encoder_state_dict[key].numpy().astype(config.dtype),
+                device,
             )
+            for key in visual_encoder_key_list
+        ]
         q_former_key_list = (
             list(q_former_state_dict.keys())[1:3]
             + [list(q_former_state_dict.keys())[0]]
@@ -565,18 +566,19 @@ def get_model(args):
                 6 : 8 + (26 + 16) * config.bert_hidden_layers // 2
             ]
         )
-        for key in q_former_key_list:
-            param_list.append(
-                tvm.nd.array(
-                    q_former_state_dict[key].numpy().astype(config.dtype), device
-                )
+        param_list.extend(
+            tvm.nd.array(
+                q_former_state_dict[key].numpy().astype(config.dtype), device
             )
+            for key in q_former_key_list
+        )
         llama_key_list = list(llama_state_dict.keys())[-2:]
-        for key in llama_key_list:
-            param_list.append(
-                tvm.nd.array(llama_state_dict[key].numpy().astype(config.dtype), device)
+        param_list.extend(
+            tvm.nd.array(
+                llama_state_dict[key].numpy().astype(config.dtype), device
             )
-
+            for key in llama_key_list
+        )
         return mod, param_manager, param_list
 
     raise ValueError(f"Unsupported model: {model_name}")
@@ -591,16 +593,10 @@ def download_cached_file(url, check_hash=True, progress=False):
     import torch.distributed as dist
 
     def is_dist_avail_and_initialized():
-        if not dist.is_available():
-            return False
-        if not dist.is_initialized():
-            return False
-        return True
+        return False if not dist.is_available() else bool(dist.is_initialized())
 
     def get_rank():
-        if not is_dist_avail_and_initialized():
-            return 0
-        return dist.get_rank()
+        return 0 if not is_dist_avail_and_initialized() else dist.get_rank()
 
     def is_main_process():
         return get_rank() == 0

@@ -249,10 +249,10 @@ class QuantSpecUpdater(PyExprVisitor):
         for gv, func in mod.functions.items():
             if not isinstance(func, relax.Function):
                 continue
-            if func.attrs is None or not "num_input" in func.attrs:
+            if func.attrs is None or "num_input" not in func.attrs:
                 continue
 
-            self.param_map = dict()
+            self.param_map = {}
             num_input = int(func.attrs["num_input"])
             params_in_func = self.param_manager.params_in_func[gv.name_hint]
             assert len(func.params) - num_input == len(params_in_func)

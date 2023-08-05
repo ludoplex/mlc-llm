@@ -124,22 +124,19 @@ class RotaryEmbedding(nn.Module):
     ):
         super().__init__()
         head_dim = hidden_size // num_attention_heads
-        if rotary_dim is not None:
-            rotary_ndim = rotary_dim
-        else:
-            rotary_ndim = int(head_dim * rotary_pct)
+        rotary_ndim = int(head_dim * rotary_pct) if rotary_dim is None else rotary_dim
         inv_freq = 1.0 / (
             position_embedding_base
             ** (np.arange(0, rotary_ndim, 2).astype("float32") / rotary_ndim)
         )
         t = np.arange(max_sequence_length, dtype=inv_freq.dtype)
         freq = np.einsum("i,j->ij", t, inv_freq)
-        if swizzle_style == "neox":
-            emb = np.concatenate((freq, freq), axis=-1)
-        elif swizzle_style == "gptj":
+        if swizzle_style == "gptj":
             emb = np.repeat(freq, repeats=2, axis=-1)
+        elif swizzle_style == "neox":
+            emb = np.concatenate((freq, freq), axis=-1)
         else:
-            raise KeyError("Unrecognized swizzle style {}".format(swizzle_style))
+            raise KeyError(f"Unrecognized swizzle style {swizzle_style}")
         self.swizzle_style = swizzle_style
         self.rotary_ndim = rotary_ndim
         self.cos_cached = relax.const(tvm_array(np.cos(emb).astype(dtype)))
@@ -170,7 +167,7 @@ class RotaryEmbedding(nn.Module):
                 x[i_batch_size, i_seq_len, i_num_heads, i_head_dim - 1],
             )
         else:
-            raise KeyError("Unrecognized swizzle style: {}.".format(self.swizzle_style))
+            raise KeyError(f"Unrecognized swizzle style: {self.swizzle_style}.")
 
     def forward(
         self,

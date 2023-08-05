@@ -6,22 +6,24 @@ from tvm.relax.dpl.pattern import GlobalVarPattern, TuplePattern, is_op, wildcar
 
 
 def pattern_check(ctx: relax.transform.PatternCheckContext) -> bool:
-    take = ctx.annotated_expr["take"]
     decode = ctx.annotated_expr["decode"]
     if not isinstance(decode, relax.expr.Call):
         return False
-    if not isinstance(take.args[0], relax.GlobalVar) or not isinstance(
-        decode.args[0], relax.GlobalVar
-    ):
-        return False
-    return "take" in take.args[0].name_hint and "decode" in decode.args[0].name_hint
+    take = ctx.annotated_expr["take"]
+    return (
+        False
+        if not isinstance(take.args[0], relax.GlobalVar)
+        or not isinstance(decode.args[0], relax.GlobalVar)
+        else "take" in take.args[0].name_hint
+        and "decode" in decode.args[0].name_hint
+    )
 
 
 def decode_take_pattern(n_aux_tensor: int):
     aux_tensors = [wildcard(), wildcard(), wildcard()]
     decode = is_op("relax.call_tir")(
         GlobalVarPattern(),
-        TuplePattern([*aux_tensors[0:n_aux_tensor]]),
+        TuplePattern([*aux_tensors[:n_aux_tensor]]),
         add_constraint=False,
     )
     indices = wildcard()

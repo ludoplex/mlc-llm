@@ -40,7 +40,7 @@ def git_describe_version(original_version):
     exec(compile(open(ver_py, "rb").read(), ver_py, "exec"), libver, libver)
     _, gd_version = libver["git_describe_version"]()
     if gd_version is not None and gd_version != original_version:
-        print("Use git describe based version %s" % gd_version)
+        print(f"Use git describe based version {gd_version}")
     return gd_version
 
 

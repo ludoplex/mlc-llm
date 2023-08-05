@@ -62,14 +62,13 @@ class State:
 def _load_state(state: Expr, hidden_size: int, dtype: str) -> Expr:
     # Reuse `attention_kv_cache_view`
     f_load_cache = relax.extern("vm.builtin.attention_kv_cache_view")
-    cache = nn.emit(
+    return nn.emit(
         relax.Call(
             f_load_cache,
             [state, R.shape([1, hidden_size])],
             sinfo_args=[R.Tensor((1, hidden_size), dtype)],
         )
     )
-    return cache
 
 
 def _store_state(state: Expr, value: Expr):
@@ -323,7 +322,7 @@ class RWKVModel(nn.Module):
     def forward(self, input_ids: Expr, state: Expr) -> Tuple[Expr, List[Expr]]:
         hidden_states = self.embeddings(input_ids)
         states = []
-        for _, layer in enumerate(self.blocks):
+        for layer in self.blocks:
             hidden_states, layer_states = layer(hidden_states, state)
             states += layer_states
         hidden_states = self.ln_out(hidden_states)
@@ -420,17 +419,17 @@ def create_kv_cache_func(bb: relax.BlockBuilder, config: RWKVConfig) -> None:
                 ("ffn_x", input_dtype_zeros),
             ]
             for i in range(config.num_hidden_layers):
-                for name, init_value in conf:
-                    caches.append(
-                        bb.emit(
-                            relax.Call(
-                                f_kv_cache_create,
-                                [init_value, init_shape, relax.PrimValue(1)],
-                                sinfo_args=[R.Object()],
-                            ),
-                            name_hint=f"{name}_state_{i}",
-                        )
+                caches.extend(
+                    bb.emit(
+                        relax.Call(
+                            f_kv_cache_create,
+                            [init_value, init_shape, relax.PrimValue(1)],
+                            sinfo_args=[R.Object()],
+                        ),
+                        name_hint=f"{name}_state_{i}",
                     )
+                    for name, init_value in conf
+                )
             gv = bb.emit_output(caches)
         bb.emit_func_output(gv)
 
@@ -445,14 +444,18 @@ def create_kv_cache_reset_func(bb: relax.BlockBuilder, config: RWKVConfig) -> No
             fp32_neg_inf = bb.emit(fp32_zeros - relax.const(1e30, "float32"))
             caches = []
             for i in range(config.num_hidden_layers):
-                caches.append(
-                    _store_state(state[i * 5 + State.ATT_X], input_dtype_zeros)
-                )
-                caches.append(_store_state(state[i * 5 + State.ATT_B], fp32_zeros))
-                caches.append(_store_state(state[i * 5 + State.ATT_A], fp32_zeros))
-                caches.append(_store_state(state[i * 5 + State.ATT_P], fp32_neg_inf))
-                caches.append(
-                    _store_state(state[i * 5 + State.FFN_X], input_dtype_zeros)
+                caches.extend(
+                    (
+                        _store_state(
+                            state[i * 5 + State.ATT_X], input_dtype_zeros
+                        ),
+                        _store_state(state[i * 5 + State.ATT_B], fp32_zeros),
+                        _store_state(state[i * 5 + State.ATT_A], fp32_zeros),
+                        _store_state(state[i * 5 + State.ATT_P], fp32_neg_inf),
+                        _store_state(
+                            state[i * 5 + State.FFN_X], input_dtype_zeros
+                        ),
+                    )
                 )
             gv = bb.emit_output(caches)
         bb.emit_func_output(gv)

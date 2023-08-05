@@ -111,7 +111,7 @@ def encoding_func(sym: bool, group_size: int, nbit: int, mode: str, storage_nbit
             return (max_value / tir.const(max_int_value, dtype)) if mode.startswith("int") else max_value
 
         scale = te.compute(shape=scale_min_shape, fcompute=f_compute_scale, name="scale")
-        storage_dtype = ("uint" + str(storage_nbit)) if mode.startswith("int") else "uint32"
+        storage_dtype = f"uint{storage_nbit}" if mode.startswith("int") else "uint32"
 
         def f_scale_weight(i, j):
             group_idx = j // group_size

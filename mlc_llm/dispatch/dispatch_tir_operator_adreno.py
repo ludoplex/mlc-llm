@@ -3213,12 +3213,15 @@ tir_dispatch_dict = {
 
 
 def lookup_func(func):
-    for (hash_value, func_before), f_after in tir_dispatch_dict.items():
-        if tvm.ir.structural_hash(func) == hash_value and tvm.ir.structural_equal(
-            func, func_before
-        ):
-            return f_after
-    return None
+    return next(
+        (
+            f_after
+            for (hash_value, func_before), f_after in tir_dispatch_dict.items()
+            if tvm.ir.structural_hash(func) == hash_value
+            and tvm.ir.structural_equal(func, func_before)
+        ),
+        None,
+    )
 
 
 @tvm.transform.module_pass(opt_level=0, name="DispatchTIROperatorAdreno")

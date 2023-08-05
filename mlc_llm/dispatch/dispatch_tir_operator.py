@@ -7,23 +7,14 @@ from tvm import IRModule
 class DispatchTIROperator:  # pylint: disable=too-few-public-methods
     def __init__(self, model: str):
         # pylint: disable=import-outside-toplevel
-        if model == "llama":
-            from .llama import lookup
+        if model in {"gpt_bigcode", "minigpt", "rwkv", "gptj"}:
+            lookup = None
 
         elif model == "gpt_neox":
             from .gpt_neox import lookup
 
-        elif model == "gpt_bigcode":
-            lookup = None
-
-        elif model == "minigpt":
-            lookup = None
-
-        elif model == "rwkv":
-            lookup = None
-        
-        elif model == "gptj":
-            lookup = None
+        elif model == "llama":
+            from .llama import lookup
 
         else:
             raise ValueError(f"Model {model} not supported")

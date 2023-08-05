@@ -179,7 +179,7 @@ def reorder_func(
     for get_param_binding in get_param_bindings:
         binding_queue.append(get_param_binding)
 
-        while len(binding_queue) > 0:
+        while binding_queue:
             binding = binding_queue.pop(0)
             new_bindings.append(binding)
             for user_binding in var_users[binding.var]:

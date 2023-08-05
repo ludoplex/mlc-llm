@@ -23,13 +23,13 @@ if __name__ == "__main__":
         while True:
             use_backend = input(backend.prompt_str)
             if use_backend in ["yes", "Y", "y"]:
-                cmake_config_str += "set({} ON)\n".format(backend.cmake_config_name)
+                cmake_config_str += f"set({backend.cmake_config_name} ON)\n"
                 break
             elif use_backend in ["no", "N", "n"]:
-                cmake_config_str += "set({} OFF)\n".format(backend.cmake_config_name)
+                cmake_config_str += f"set({backend.cmake_config_name} OFF)\n"
                 break
             else:
-                print("Invalid input: {}. Please input again.".format(use_backend))
+                print(f"Invalid input: {use_backend}. Please input again.")
     print(cmake_config_str)
     print("Writing configuration to config.cmake...")
 

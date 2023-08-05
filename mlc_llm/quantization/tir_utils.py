@@ -30,7 +30,7 @@ def _tir_u32_to_int_to_float(nbit: int, val: tir.PrimExpr, pos: tir.PrimExpr, dt
 
 
 def _tir_packed_uint_to_uint_to_float(storage_nbit: int):
-    storage_dtype = "uint" + str(storage_nbit)
+    storage_dtype = f"uint{storage_nbit}"
 
     def f_convert(nbit: int, val: tir.PrimExpr, pos: tir.PrimExpr, dtype: str):
         assert val.dtype == storage_dtype
@@ -41,7 +41,7 @@ def _tir_packed_uint_to_uint_to_float(storage_nbit: int):
 
 
 def _tir_packed_int_to_int_to_float(storage_nbit: int):
-    storage_dtype = "int" + str(storage_nbit)
+    storage_dtype = f"int{storage_nbit}"
 
     def f_convert(nbit: int, val: tir.PrimExpr, pos: tir.PrimExpr, dtype: str):
         assert val.dtype == storage_dtype

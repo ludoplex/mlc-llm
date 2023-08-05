@@ -436,8 +436,7 @@ class GPTNeoXModel(nn.Module):
                 past_key_value=past_key_value,
                 all_seq_len_shape=all_seq_len_shape,
             )
-            present_kv_cache.append(present_k_cache)
-            present_kv_cache.append(present_v_cache)
+            present_kv_cache.extend((present_k_cache, present_v_cache))
         hidden_states = self.final_layer_norm(hidden_states)
         return hidden_states, present_kv_cache
 
@@ -632,18 +631,17 @@ def create_kv_cache_func(
     with bb.function("create_kv_cache", []):
         with bb.dataflow():
             zeros = bb.emit(relax.op.zeros(init_shape, config.dtype))
-            caches = []
             f_kv_cache_create = relax.extern("vm.builtin.attention_kv_cache_create")
-            for _ in range(config.num_hidden_layers * 2):
-                caches.append(
-                    bb.emit(
-                        relax.Call(
-                            f_kv_cache_create,
-                            args=[zeros, init_shape, relax.PrimValue(0)],
-                            sinfo_args=[relax.ObjectStructInfo()],
-                        )
+            caches = [
+                bb.emit(
+                    relax.Call(
+                        f_kv_cache_create,
+                        args=[zeros, init_shape, relax.PrimValue(0)],
+                        sinfo_args=[relax.ObjectStructInfo()],
                     )
                 )
+                for _ in range(config.num_hidden_layers * 2)
+            ]
             gv = bb.emit_output(caches)
         bb.emit_func_output(gv)
 

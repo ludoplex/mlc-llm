@@ -12,7 +12,7 @@ os.environ["SKIP_LOADING_MLCLLM_SO"] = "1"
 # General information about the project.
 project = "mlc-llm"
 author = "MLC LLM Contributors"
-copyright = "2023, %s" % author
+copyright = f"2023, {author}"
 
 # Version information.
 

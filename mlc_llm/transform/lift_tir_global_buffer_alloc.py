@@ -27,7 +27,7 @@ def remove_global_buf_alloc(
     prev_root_block = func.body.block
     for buf_alloc in func.body.block.alloc_buffers:
         if buf_alloc.scope() == "global":
-            param = tir.Var("var_" + buf_alloc.name, "handle")
+            param = tir.Var(f"var_{buf_alloc.name}", "handle")
             params.insert(insertion_point, param)
             insertion_point += 1
             buffer_map[param] = buf_alloc
@@ -37,7 +37,7 @@ def remove_global_buf_alloc(
         else:
             alloc_buffers.append(buf_alloc)
 
-    if len(tensor_sinfo) == 0:
+    if not tensor_sinfo:
         return func, []
 
     assert len(prev_root_block.iter_vars) == 0
@@ -68,17 +68,14 @@ def remove_global_buf_alloc(
 
 def contain_symbolic_var(tensor_sinfo: relax.TensorStructInfo) -> bool:
     assert isinstance(tensor_sinfo.shape, relax.ShapeExpr)
-    for v in tensor_sinfo.shape.values:
-        if not isinstance(v, tir.IntImm):
-            return True
-    return False
+    return any(not isinstance(v, tir.IntImm) for v in tensor_sinfo.shape.values)
 
 
 def resolve_tir_var_mapping(
     func: tir.PrimFunc, call: relax.Call, tensor_sinfo: List[relax.TensorStructInfo]
 ) -> Tuple[List[relax.TensorStructInfo], bool]:
     """Resolve the TIR symbolic var relationship across sides of PrimFunc and Relax Function"""
-    var_map: Dict[tir.Var, tir.PrimExpr] = dict()
+    var_map: Dict[tir.Var, tir.PrimExpr] = {}
 
     n_arg = len(call.args[1].fields)
     for i in range(n_arg):
@@ -113,9 +110,9 @@ def resolve_tir_var_mapping(
             updated_tensor_sinfo.append(sinfo)
             continue
 
-        new_shape = []
-        for v in sinfo.shape.values:
-            new_shape.append(tir.stmt_functor.substitute(v, var_map))
+        new_shape = [
+            tir.stmt_functor.substitute(v, var_map) for v in sinfo.shape.values
+        ]
         updated_tensor_sinfo.append(relax.TensorStructInfo(new_shape, sinfo.dtype))
     return updated_tensor_sinfo, True
 
@@ -125,14 +122,18 @@ class LiftTIRGlobalBufferAlloc:
     def transform_module(
         self, mod: IRModule, ctx: tvm.transform.PassContext
     ) -> IRModule:
+
+
+
         @mutator
         class TIRGlobalAllocRewriter(PyExprMutator):
             def __init__(self, mod: IRModule):
                 super().__init__(mod)
                 self.mod = mod
                 self.gv2new_tensor_sinfo: Dict[
-                    tvm.ir.GlobalVar, Tuple[List[relax.TensorStructInfo], tir.PrimFunc]
-                ] = dict()
+                    tvm.ir.GlobalVar,
+                    Tuple[List[relax.TensorStructInfo], tir.PrimFunc],
+                ] = {}
 
             def transform(self) -> IRModule:
                 for gv, func in self.mod.functions.items():
@@ -196,5 +197,6 @@ class LiftTIRGlobalBufferAlloc:
                         ],
                         attrs=call.attrs,
                     )
+
 
         return TIRGlobalAllocRewriter(mod).transform()

@@ -251,10 +251,7 @@ def _setup_model_path(args: argparse.Namespace):  # pylint: disable=too-many-bra
 def validate_config(model_path: str):
     if os.path.exists(os.path.join(model_path, "mlc-chat-config.json")):
         raise KeyError(
-            "The model located in the directory {} has already been compiled by MLC-LLM. There is"
-            " no need to compile it again. If you wish to compile a new model, please provide a"
-            " directory (or hf-path) that contains the pre-compiled model in raw HuggingFace"
-            " format instead.".format(model_path)
+            f"The model located in the directory {model_path} has already been compiled by MLC-LLM. There is no need to compile it again. If you wish to compile a new model, please provide a directory (or hf-path) that contains the pre-compiled model in raw HuggingFace format instead."
         )
     if model_path.split("/")[-1].startswith("minigpt"):
         # minigpt does not contain a config.json file so we skip the check
@@ -332,11 +329,7 @@ def mod_transform_before_build(
 
             major, minor = parse_compute_version(tvm.cuda(0).compute_version)
 
-            if major == 8:
-                sm = 80
-            else:
-                sm = 10 * major + minor
-
+            sm = 80 if major == 8 else 10 * major + minor
             mod = tvm.transform.Sequential(
                 [
                     relax.transform.FuseOpsByPattern(

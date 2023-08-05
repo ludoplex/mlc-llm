@@ -23,10 +23,7 @@ class FTRowwiseQuantizationSpec(QuantizationSpec):
 
         if tvm.cuda(0).exist:
             major, minor = parse_compute_version(tvm.cuda(0).compute_version)
-            if major == 8:
-                self.sm = 80
-            else:
-                self.sm = 10 * major + minor
+            self.sm = 80 if major == 8 else 10 * major + minor
         else:
             self.sm = None
 
@@ -89,7 +86,7 @@ def encoding_func(nbit: int, storage_nbit: int, dtype: str = "float32"):
             return max_value / tir.const(max_int_value + 1, dtype)
 
         scale = te.compute(shape=scale_min_shape, fcompute=f_compute_scale, name="scale")
-        storage_dtype = "int" + str(storage_nbit)
+        storage_dtype = f"int{storage_nbit}"
 
         def f_scale_weight(i, j):
             w_scaled = tir.round(tir.Cast(dtype, weight[i, j]) / scale[i])
@@ -176,9 +173,9 @@ class FTQuantizeUpdater(QuantSpecUpdater._cls):
         if rhs.args[0] not in self.param_map:
             return
 
-        param = self.param_map[rhs.args[0]]
-
         if call.struct_info.dtype == "float32" or rhs.struct_info.shape[-1] % 8 != 0:
+            param = self.param_map[rhs.args[0]]
+
             # FT requires N to be a multiple of 8
             # FT does not support fp32 output dtype
             # TODO(masahi): If `matmul(..., out_dtype="float32")` is immediately followed

@@ -14,13 +14,13 @@ def main():
             os.path.join(artifact_path, local_id, f"{local_id}-{target}.tar"),
             os.path.join(artifact_path, "prebuilt", "lib", f"{local_id}-{target}.tar")
         ]
-        valid_paths = [p for p in paths if os.path.isfile(p)]
-        if not valid_paths:
+        if valid_paths := [p for p in paths if os.path.isfile(p)]:
+            tar_list.append(valid_paths[0])
+
+        else:
             raise RuntimeError(
                 f"Cannot find lib for {local_id} in the following candidate path: {paths}"
             )
-        tar_list.append(valid_paths[0])
-
     cc.create_staticlib(os.path.join("build", "lib", "libmodel_iphone.a"), tar_list)
     print(f"Creating lib from {tar_list}..")
 

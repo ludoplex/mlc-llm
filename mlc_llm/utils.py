@@ -13,9 +13,15 @@ from .relax_model import param_manager
 from .transform import ReorderTransformFunc
 
 
-supported_model_types = set(
-    ["llama", "gpt_neox", "gpt_bigcode", "minigpt", "moss", "rwkv", "gptj"]
-)
+supported_model_types = {
+    "llama",
+    "gpt_neox",
+    "gpt_bigcode",
+    "minigpt",
+    "moss",
+    "rwkv",
+    "gptj",
+}
 
 
 def argparse_postproc_common(args: argparse.Namespace) -> None:
@@ -73,13 +79,14 @@ def argparse_postproc_common(args: argparse.Namespace) -> None:
         "gpt_bigcode-santacoder": "code_gpt",
     }
 
-    for prefix, conv_template in model_conv_templates.items():
-        if model.startswith(prefix):
-            args.conv_template = conv_template
-            break
-    else:
-        args.conv_template = f"{args.model_category}_default"
-
+    args.conv_template = next(
+        (
+            conv_template
+            for prefix, conv_template in model_conv_templates.items()
+            if model.startswith(prefix)
+        ),
+        f"{args.model_category}_default",
+    )
     if args.quantization not in quantization_schemes:
         raise ValueError(f'Quantization "{args.quantization}" is not supported.')
     args.quantization = quantization_schemes[args.quantization]
@@ -185,9 +192,8 @@ def convert_weights(
 def save_params(params: List[tvm.nd.NDArray], artifact_path: str) -> None:
     from tvm.contrib import tvmjs  # pylint: disable=import-outside-toplevel
 
-    meta_data = {}
     param_dict = {}
-    meta_data["ParamSize"] = len(params)
+    meta_data = {"ParamSize": len(params)}
     total_size = 0.0
     for i, nd in enumerate(params):
         param_dict[f"param_{i}"] = nd
@@ -204,11 +210,8 @@ def load_params(artifact_path: str, device) -> List[tvm.nd.NDArray]:
     from tvm.contrib import tvmjs  # pylint: disable=import-outside-toplevel
 
     params, meta = tvmjs.load_ndarray_cache(f"{artifact_path}/params", device)
-    plist = []
     size = meta["ParamSize"]
-    for i in range(size):
-        plist.append(params[f"param_{i}"])
-    return plist
+    return [params[f"param_{i}"] for i in range(size)]
 
 
 def copy_tokenizer(args: argparse.Namespace) -> None:
@@ -331,9 +334,7 @@ def _detect_local_vulkan():
 
 def _detect_local_opencl():
     dev = tvm.opencl()
-    if not dev.exist:
-        return None
-    return tvm.target.Target("opencl")
+    return None if not dev.exist else tvm.target.Target("opencl")
 
 
 def detect_local_target():

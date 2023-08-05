@@ -235,41 +235,33 @@ class ParamManager:
         # For each parameter in the input model, get its quantization kind and
         # register the parameter with its name and quantization kind.
         for name, relax_param in named_parameters(model).items():
-            _base_model_prefix = quantization_scheme.get_base_model_prefix()
-            if _base_model_prefix:
+            if _base_model_prefix := quantization_scheme.get_base_model_prefix():
                 name = f"{_base_model_prefix}.{name}"
             quant_kind = f_get_param_quant_kind(name, relax_param.struct_info)
-            if quantization_scheme.pre_quantized:
-                # if pre_quantized, register the quantized tensor based on the quant_kind
-                if quantization_scheme.is_inside_layer_modules(name):
-                    quantization_spec = getattr(quantization_scheme, quant_kind.name)
-                    quantized_params = quantization_spec.get_quantized_params(name, relax_param)
-                    self.raw_quantized_name_map.setdefault(relax_param, [])
-                    for quantized_name, quantized_param in quantized_params.items():
-                        param = self._register_param(
-                            quantized_name,
-                            quantized_param,
-                            quantization_spec,
-                            func_name,
-                        )
-                        if quantized_param not in self.raw_quantized_name_map[relax_param]:
-                            self.raw_quantized_name_map[relax_param].append(quantized_param)
-                else:
-                    # do not quantize the parameters outside the layer modules
+            if (
+                quantization_scheme.pre_quantized
+                and quantization_scheme.is_inside_layer_modules(name)
+            ):
+                quantization_spec = getattr(quantization_scheme, quant_kind.name)
+                quantized_params = quantization_spec.get_quantized_params(name, relax_param)
+                self.raw_quantized_name_map.setdefault(relax_param, [])
+                for quantized_name, quantized_param in quantized_params.items():
                     param = self._register_param(
-                        name,
-                        relax_param,
-                        getattr(quantization_scheme, quant_kind.name),
+                        quantized_name,
+                        quantized_param,
+                        quantization_spec,
                         func_name,
                     )
+                    if quantized_param not in self.raw_quantized_name_map[relax_param]:
+                        self.raw_quantized_name_map[relax_param].append(quantized_param)
             else:
+                # do not quantize the parameters outside the layer modules
                 param = self._register_param(
                     name,
                     relax_param,
                     getattr(quantization_scheme, quant_kind.name),
                     func_name,
                 )
-
             self.params_in_func[func_name].append(param)
 
     def set_param_loading_func(
@@ -327,7 +319,7 @@ class ParamManager:
             self.safetensors_load_func = load_file
             # pylint: enable=import-outside-toplevel
         if not no_lazy_param_loading:
-            self.pidx2pname = {pidx: pname for pidx, pname in enumerate(self.param_names)}
+            self.pidx2pname = dict(enumerate(self.param_names))
             self.torch_pname2binname = load_torch_pname2binname_map(
                 self.model_path,
                 self.use_safetensors,
@@ -335,8 +327,8 @@ class ParamManager:
                 f_convert_pname_fwd=f_convert_pname_fwd,
             )
         else:
-            self.pidx2pname = dict()
-            self.torch_pname2binname = dict()
+            self.pidx2pname = {}
+            self.torch_pname2binname = {}
 
     def transform_dequantize(self, mod: tvm.IRModule) -> tvm.IRModule:
         """Apply dequantization to the input IRModule.
@@ -363,7 +355,7 @@ class ParamManager:
         for gv, func in mod.functions.items():
             if not isinstance(func, relax.Function):
                 continue
-            if func.attrs is None or not "num_input" in func.attrs:
+            if func.attrs is None or "num_input" not in func.attrs:
                 continue
             func2param_var[gv.name_hint] = relax.Var("params", quantized_param_info)
 
@@ -407,16 +399,16 @@ class ParamManager:
             assert self.param2qrange is not None
             return self.quantized_param_info
 
-        self.param2qrange = dict()
+        self.param2qrange = {}
         quantized_param_info: List[relax.TensorStructInfo] = []
         for name in self.param_names:
             param = self.params[name]
             loaded_tensor_info = param.quant_spec.get_loaded_tensor_info(param.param_info)
 
-            provided_tensor_vars: List[relax.Var] = []
-            for provided_info in loaded_tensor_info:
-                provided_tensor_vars.append(relax.Var("var", provided_info))
-
+            provided_tensor_vars: List[relax.Var] = [
+                relax.Var("var", provided_info)
+                for provided_info in loaded_tensor_info
+            ]
             # Get the quantization function of this parameter.
             f_quantize = param.quant_spec.get_quantize_func(param.param_info)
             if f_quantize is None:
@@ -630,7 +622,8 @@ class ParamManager:
             var.struct_info.shape, relax.ShapeExpr
         ), "The parameter to register is expected to have static shape"
         assert all(
-            [isinstance(dim_len, tir.IntImm) for dim_len in var.struct_info.shape.values]
+            isinstance(dim_len, tir.IntImm)
+            for dim_len in var.struct_info.shape.values
         ), "The parameter to register is expected to have static shape"
 
         if name in self.params:
@@ -694,27 +687,25 @@ class ParamManager:
         The dequantized parameter, in the form of a relax.Var.
         """
         if not qparams:
-            # Get the corresponding Relax vars of the quantized tensors of this parameter.
-            qparams: List[relax.Var] = []
-            for qparam_idx in self.param2qrange[param]:
-                qparams.append(bb.emit(relax.TupleGetItem(quantized_tuple, qparam_idx)))
-
+            qparams: List[relax.Var] = [
+                bb.emit(relax.TupleGetItem(quantized_tuple, qparam_idx))
+                for qparam_idx in self.param2qrange[param]
+            ]
         # Get the dequantization function of this parameter.
         f_dequantize = param.quant_spec.get_dequantize_func(
             param_info=param.param_info,
             qparam_info=[qparam.struct_info for qparam in qparams],
         )
-        if f_dequantize is None:
-            # If the parameter does not have a dequantization function, its "quantized
-            # data" is expected to have only one element.
-            assert len(qparams) == 1, (
-                "A parameter without dequantization function is expected not to have "
-                'more than one "quantized data".'
-            )
-            return qparams[0]
-        else:
+        if f_dequantize is not None:
             # Apply the dequantization function.
             return bb.emit(f_dequantize(bb, qparams))
+        # If the parameter does not have a dequantization function, its "quantized
+        # data" is expected to have only one element.
+        assert len(qparams) == 1, (
+            "A parameter without dequantization function is expected not to have "
+            'more than one "quantized data".'
+        )
+        return qparams[0]
 
 
 @mutator
@@ -757,7 +748,7 @@ class ParamReplacer(PyExprMutator):
         for gv, func in self.mod.functions.items():
             if not isinstance(func, relax.Function):
                 continue
-            if func.attrs is None or not "num_input" in func.attrs:
+            if func.attrs is None or "num_input" not in func.attrs:
                 continue
 
             assert (
@@ -857,7 +848,7 @@ def create_quantize_func(param_manager: ParamManager) -> tvm.IRModule:
     and a series of TIR functions is returned.
     """
     bb = relax.BlockBuilder()
-    param2qrange = dict()
+    param2qrange = {}
 
     # Construct the input of the function.
     # We need a list of ranges for each
@@ -881,13 +872,12 @@ def create_quantize_func(param_manager: ParamManager) -> tvm.IRModule:
             quantized_params: List[relax.Var] = []
             for pidx, name in enumerate(param_manager.param_names):
                 param = param_manager.params[name]
-                param_vars: List[relax.Var] = []
-                # Emit relax.TupleGetItem to get the raw parameters or pre-quantized params.
-                for loaded_tensor_idx in loaded_tensor_ranges[pidx]:
-                    param_vars.append(
-                        bb.emit(relax.TupleGetItem(raw_param_tuple, loaded_tensor_idx))
+                param_vars: List[relax.Var] = [
+                    bb.emit(
+                        relax.TupleGetItem(raw_param_tuple, loaded_tensor_idx)
                     )
-
+                    for loaded_tensor_idx in loaded_tensor_ranges[pidx]
+                ]
                 # Get the quantization function of this parameter.
                 f_quantize = param.quant_spec.get_quantize_func(param.param_info)
                 if f_quantize is None:
